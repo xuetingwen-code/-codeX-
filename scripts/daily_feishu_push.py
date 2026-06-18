@@ -383,12 +383,22 @@ def run_one(bot_key, builder):
 
 
 def main():
-    log("daily push started")
-    results = [
-        run_one("taptap", build_taptap_message),
-        run_one("figma", build_figma_message),
-        run_one("jira", build_jira_message),
-    ]
+    builders = {
+        "taptap": build_taptap_message,
+        "figma": build_figma_message,
+        "jira": build_jira_message,
+    }
+    reports_raw = os.environ.get("REPORTS", "all").strip().lower()
+    if reports_raw == "all":
+        selected = ["taptap", "figma", "jira"]
+    else:
+        selected = [item.strip() for item in reports_raw.split(",") if item.strip()]
+    unknown = [item for item in selected if item not in builders]
+    if unknown:
+        raise RuntimeError("Unknown reports in REPORTS: " + ", ".join(unknown))
+
+    log("daily push started: " + ", ".join(selected))
+    results = [run_one(name, builders[name]) for name in selected]
     log("daily push finished")
     if not all(results):
         raise SystemExit(1)
