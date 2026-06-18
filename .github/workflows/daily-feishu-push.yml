@@ -1,0 +1,33 @@
+name: Daily Feishu Push
+
+on:
+  schedule:
+    # 11:00 in Asia/Shanghai is 03:00 UTC.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Send daily Feishu pushes
+        env:
+          FEISHU_TAPTAP_WEBHOOK: ${{ secrets.FEISHU_TAPTAP_WEBHOOK }}
+          FEISHU_TAPTAP_SECRET: ${{ secrets.FEISHU_TAPTAP_SECRET }}
+          FEISHU_FIGMA_WEBHOOK: ${{ secrets.FEISHU_FIGMA_WEBHOOK }}
+          FEISHU_FIGMA_SECRET: ${{ secrets.FEISHU_FIGMA_SECRET }}
+          FEISHU_JIRA_WEBHOOK: ${{ secrets.FEISHU_JIRA_WEBHOOK }}
+          FEISHU_JIRA_SECRET: ${{ secrets.FEISHU_JIRA_SECRET }}
+          FIGMA_TOKEN: ${{ secrets.FIGMA_TOKEN }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: python scripts/daily_feishu_push.py
