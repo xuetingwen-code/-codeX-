@@ -18,32 +18,58 @@ TODAY = dt.datetime.now(TZ).date()
 TODAY_STR = TODAY.isoformat()
 LOG_PATH = os.path.join(os.path.dirname(__file__), "daily_feishu_push.log")
 
+
+REQUIRED_ENV = [
+    "FEISHU_TAPTAP_WEBHOOK",
+    "FEISHU_TAPTAP_SECRET",
+    "FEISHU_FIGMA_WEBHOOK",
+    "FEISHU_FIGMA_SECRET",
+    "FEISHU_JIRA_WEBHOOK",
+    "FEISHU_JIRA_SECRET",
+    "FIGMA_TOKEN",
+    "JIRA_EMAIL",
+    "JIRA_TOKEN",
+]
+
+
+def require_env(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing GitHub secret: {name}")
+    return value
+
+
+missing_env = [name for name in REQUIRED_ENV if not os.environ.get(name, "").strip()]
+if missing_env:
+    raise RuntimeError("Missing GitHub secrets: " + ", ".join(missing_env))
+
 BOTS = {
     "taptap": {
         "name": "TapTap评论日报",
-        "webhook": os.environ["FEISHU_TAPTAP_WEBHOOK"],
-        "secret": os.environ["FEISHU_TAPTAP_SECRET"],
+        "webhook": require_env("FEISHU_TAPTAP_WEBHOOK"),
+        "secret": require_env("FEISHU_TAPTAP_SECRET"),
     },
     "figma": {
         "name": "交互更新助手",
-        "webhook": os.environ["FEISHU_FIGMA_WEBHOOK"],
-        "secret": os.environ["FEISHU_FIGMA_SECRET"],
+        "webhook": require_env("FEISHU_FIGMA_WEBHOOK"),
+        "secret": require_env("FEISHU_FIGMA_SECRET"),
     },
     "jira": {
         "name": "今日任务",
-        "webhook": os.environ["FEISHU_JIRA_WEBHOOK"],
-        "secret": os.environ["FEISHU_JIRA_SECRET"],
+        "webhook": require_env("FEISHU_JIRA_WEBHOOK"),
+        "secret": require_env("FEISHU_JIRA_SECRET"),
     },
 }
 
-FIGMA_TOKEN = os.environ["FIGMA_TOKEN"]
-JIRA_EMAIL = os.environ["JIRA_EMAIL"]
-JIRA_TOKEN = os.environ["JIRA_TOKEN"]
+FIGMA_TOKEN = require_env("FIGMA_TOKEN")
+JIRA_EMAIL = require_env("JIRA_EMAIL")
+JIRA_TOKEN = require_env("JIRA_TOKEN")
 JIRA_BASE = "https://xindong.atlassian.net"
 
 
 def log(message):
     stamp = dt.datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{stamp}] {message}", flush=True)
     with open(LOG_PATH, "a", encoding="utf-8") as f:
         f.write(f"[{stamp}] {message}\n")
 
@@ -89,7 +115,9 @@ def send_feishu(bot_key, text):
         raw = resp.read().decode("utf-8", "replace")
         parsed = json.loads(raw) if raw else {}
         ok = resp.status == 200 and parsed.get("code", 0) == 0
-        log(f"{bot['name']} sent={ok} status={resp.status}")
+        log(f"{bot['name']} sent={ok} status={resp.status} code={parsed.get('code')} msg={parsed.get('msg') or parsed.get('StatusMessage')}")
+        if not ok:
+            raise RuntimeError(f"{bot['name']} Feishu API rejected the message: code={parsed.get('code')} msg={parsed.get('msg') or parsed.get('StatusMessage')}")
         return ok
 
 
@@ -325,20 +353,26 @@ def run_one(bot_key, builder):
     try:
         message = builder()
         send_feishu(bot_key, message)
+        return True
     except Exception as exc:
         log(f"{BOTS[bot_key]['name']} failed: {type(exc).__name__}: {exc}")
         try:
             send_feishu(bot_key, f"{BOTS[bot_key]['name']} 推送失败：{type(exc).__name__}: {exc}")
         except Exception:
             log(traceback.format_exc())
+        return False
 
 
 def main():
     log("daily push started")
-    run_one("taptap", build_taptap_message)
-    run_one("figma", build_figma_message)
-    run_one("jira", build_jira_message)
+    results = [
+        run_one("taptap", build_taptap_message),
+        run_one("figma", build_figma_message),
+        run_one("jira", build_jira_message),
+    ]
     log("daily push finished")
+    if not all(results):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
