@@ -46,20 +46,43 @@ if missing_env:
 BOTS = {
     "taptap": {
         "name": "TapTap评论日报",
+        "webhook_env": "FEISHU_TAPTAP_WEBHOOK",
         "webhook": require_env("FEISHU_TAPTAP_WEBHOOK"),
+        "secret_env": "FEISHU_TAPTAP_SECRET",
         "secret": require_env("FEISHU_TAPTAP_SECRET"),
     },
     "figma": {
         "name": "交互更新助手",
+        "webhook_env": "FEISHU_FIGMA_WEBHOOK",
         "webhook": require_env("FEISHU_FIGMA_WEBHOOK"),
+        "secret_env": "FEISHU_FIGMA_SECRET",
         "secret": require_env("FEISHU_FIGMA_SECRET"),
     },
     "jira": {
         "name": "今日任务",
+        "webhook_env": "FEISHU_JIRA_WEBHOOK",
         "webhook": require_env("FEISHU_JIRA_WEBHOOK"),
+        "secret_env": "FEISHU_JIRA_SECRET",
         "secret": require_env("FEISHU_JIRA_SECRET"),
     },
 }
+
+
+def validate_feishu_config():
+    errors = []
+    for bot in BOTS.values():
+        if not bot["webhook"].startswith("https://open.feishu.cn/open-apis/bot/v2/hook/"):
+            errors.append(
+                f"{bot['webhook_env']} must be the full Feishu webhook URL, "
+                "starting with https://open.feishu.cn/open-apis/bot/v2/hook/"
+            )
+        if bot["secret"].startswith("http"):
+            errors.append(f"{bot['secret_env']} looks like a webhook URL; put the signing secret here.")
+    if errors:
+        raise RuntimeError("Invalid GitHub secrets:\n- " + "\n- ".join(errors))
+
+
+validate_feishu_config()
 
 FIGMA_TOKEN = require_env("FIGMA_TOKEN")
 JIRA_EMAIL = require_env("JIRA_EMAIL")
@@ -356,10 +379,6 @@ def run_one(bot_key, builder):
         return True
     except Exception as exc:
         log(f"{BOTS[bot_key]['name']} failed: {type(exc).__name__}: {exc}")
-        try:
-            send_feishu(bot_key, f"{BOTS[bot_key]['name']} 推送失败：{type(exc).__name__}: {exc}")
-        except Exception:
-            log(traceback.format_exc())
         return False
 
 
